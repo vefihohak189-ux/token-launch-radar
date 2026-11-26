@@ -14,7 +14,7 @@ on a watchlist (no token recorded, at or above the $50M floor, not a wrapped / s
 product of a token that already trades). The snapshot carries no ranking, no implied value and no
 farm plan — deriving them is the entry's work.
 
-## The value model (`lib/model.ts`, `radar-2`)
+## The value model (`lib/model.ts`, `radar-3`)
 
 The implied value is not a list of names. For a protocol with no token:
 
@@ -22,10 +22,16 @@ The implied value is not a list of names. For a protocol with no token:
 implied_value_usd = tvl_usd × multiple(category) × age_factor × growth_factor
 ```
 
-- **`multiple(category)`** is the median `mcap_usd / tvl_usd` of the protocols in the same DefiLlama
-  category whose token already trades, clamped to `[0.05, 3]`. A category with fewer than three live
-  members falls back to the market-wide median. Every figure comes from the snapshot itself, so the
-  board moves when the data moves.
+- **`multiple(category family)`** is the median `mcap_usd / tvl_usd` of the protocols in the same
+  family whose token already trades, clamped to `[0.05, 3]`. DefiLlama's category labels fragment one
+  business into slivers, so the median is taken over the family before it is taken over the labels:
+  Lending with CDP and the other lending labels, Dexs with DEX, Liquid Staking with Liquid Restaking and
+  Restaking, Bridge with Canonical and Cross Chain Bridge, Yield with Yield Aggregator and the farms, RWA
+  with Anchor BTC, Derivatives with Options and Synthetics, and the two curator labels together. A family
+  with fewer than three live members still falls back to the market-wide median, which now covers 17 of
+  the 200 rows rather than 89 when the lookup was keyed on the exact category string. Each row records
+  the family it was priced in as `model.category_family` beside `multiple_source` and `sample_size`.
+  Every figure comes from the snapshot itself, so the board moves when the data moves.
 - **`age_factor`** rewards a protocol that has run a long time without issuing a token: the longer the
   record, the closer the multiple sits to the category's realised one.
 - **`growth_factor`** follows the seven-day TVL change, damped, so a single week's spike cannot
@@ -41,8 +47,30 @@ check beside the figure.
 ## The board
 
 `out/board.json` holds 200 rows: the whole 40-slug watchlist plus 160 protocols the watchlist leaves
-out, ranked 1..200 by implied value. Every row carries a six-step farm plan, each step with its cost
-and the time it takes. Ranks are contiguous and implied value never rises as rank ascends.
+out, ranked 1..200 by implied value. Ranks are contiguous and implied value never rises as rank ascends.
+
+## The farm plan
+
+Each row's `farm_steps` is derived from the protocol's own record (`farmSteps()` and `planKindOf()` in
+`lib/model.ts`), never from a list of names. The plan's family decides the moves:
+
+- **Lending, CDP** — read the collateral list and its oracles, supply collateral, borrow a third of it,
+  keep the health factor above 1.8 and repay-and-reborrow to stay active.
+- **Dexs, DEX** — read the busiest pair, provide liquidity in a range around the price, rebalance when
+  price leaves it, and measure impermanent loss against simply holding both assets.
+- **Yield, Yield Aggregator, Liquid Staking, Liquid Restaking** — read the vault's strategy, compare its
+  APY against the underlying asset's own rate, deposit, and find the withdrawal queue before you depend
+  on the money.
+- **RWA, RWA Lending** — read the redemption terms, the lockup and the transfer rules before depositing
+  anything, and start the exit one full notice period early.
+- **Perpetuals, Derivatives, Options** — read the margin rules, trade a small notional, keep margin at
+  four times maintenance and watch the funding.
+- **Bridge, Chain, Rollup** — bridge a small amount, use the chain rather than hold there, send a second
+  smaller amount, and bridge back through the same bridge.
+- **Anything else** — the generic six-step path.
+
+Every chain a step names is one the protocol lists in `chains`. The page derives the same plan in
+`dashboard/app.js`, so the drawer and `board.json` print the same steps for all 200 rows.
 
 ## The dashboard
 

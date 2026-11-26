@@ -104,6 +104,8 @@
 
   function chainOf(row) { return row.chains && row.chains.length > 0 ? row.chains[0] : 'its main chain'; }
 
+  function chainAt(row, i) { return row.chains && row.chains[i] ? row.chains[i] : chainOf(row); }
+
   function capitalFor(row) {
     if (row.tvl_usd >= 5e9) return 250;
     if (row.tvl_usd >= 1e9) return 150;
@@ -116,6 +118,32 @@
     if (age < 180) return 60;
     if (age < 365) return 45;
     return 30;
+  }
+
+  // The family a category belongs to: one business the market prices as one thing.
+  function familyOf(c) {
+    c = c || null;
+    if (c === 'Lending' || c === 'CDP' || c === 'CDP Manager' || c === 'Uncollateralized Lending' || c === 'Collateral Markets') return 'Lending';
+    if (c === 'Dexs' || c === 'DEX' || c === 'Liquidity Manager') return 'Dexs';
+    if (c === 'Yield' || c === 'Yield Aggregator' || c === 'Farm' || c === 'Leveraged Farming') return 'Yield';
+    if (c === 'Liquid Staking' || c === 'Liquid Restaking' || c === 'Restaking' || c === 'Staking Pool') return 'Liquid Staking';
+    if (c === 'Bridge' || c === 'Canonical Bridge' || c === 'Cross Chain Bridge') return 'Bridge';
+    if (c === 'Chain' || c === 'Rollup') return 'Chain';
+    if (c === 'RWA' || c === 'RWA Lending' || c === 'Anchor BTC') return 'RWA';
+    if (c === 'Derivatives' || c === 'Options' || c === 'Options Vault' || c === 'Interest Rate Derivatives' || c === 'Synthetics' || c === 'Perpetuals') return 'Derivatives';
+    if (c === null || c === 'Risk Curators' || c === 'Onchain Capital Allocator') return 'Curators';
+    return c;
+  }
+
+  // The moves a category needs, from its DefiLlama label alone.
+  function planKindOf(c) {
+    if (c === 'Lending' || c === 'CDP' || c === 'CDP Manager' || c === 'Uncollateralized Lending' || c === 'Collateral Markets' || c === 'Collateral Management') return 'lending';
+    if (c === 'Dexs' || c === 'DEX' || c === 'Liquidity Manager') return 'dex';
+    if (c === 'Yield' || c === 'Yield Aggregator' || c === 'Liquid Staking' || c === 'Liquid Restaking' || c === 'Restaking' || c === 'Staking Pool' || c === 'Farm' || c === 'Leveraged Farming') return 'yield';
+    if (c === 'RWA' || c === 'RWA Lending' || c === 'Anchor BTC') return 'rwa';
+    if (c === 'Perpetuals' || c === 'Derivatives' || c === 'Options' || c === 'Options Vault' || c === 'Interest Rate Derivatives' || c === 'Synthetics') return 'perps';
+    if (c === 'Bridge' || c === 'Canonical Bridge' || c === 'Cross Chain Bridge' || c === 'Chain' || c === 'Rollup') return 'chain';
+    return 'generic';
   }
 
   function actionFor(row, capital, chain) {
@@ -135,16 +163,77 @@
   }
 
   function farmSteps(row) {
+    var n = row.name;
     var chain = chainOf(row);
     var capital = capitalFor(row);
     var hold = holdDaysFor(row.age_days);
+    var gas = capital >= 150 ? 8 : 4;
+    var fresh = { text: 'Use a fresh wallet that holds only the funds you plan to farm, and keep its seed phrase offline.', cost: 'under $3 of gas for the first transaction', time: '5 minutes' };
+    var weekly = { text: 'Make one qualifying action each week, such as a deposit, a borrow, a swap or a vote.', cost: 'about $2 of gas a week', time: '10 minutes a week' };
+    var holdStep = { text: 'Hold the position for at least ' + hold + ' days so the activity is counted in more than one snapshot.', cost: 'the $' + capital + ' stays in the position', time: hold + ' days' };
+    var claim = { text: "Before you withdraw, open the protocol's own points or rewards page and claim only from the link it publishes.", cost: 'no fee to check, and never pay to claim', time: '10 minutes' };
+    var log = { text: 'Write the wallet, the dates and every transaction in a farm log so you can repeat the position or unwind it.', cost: 'nothing but the log', time: '5 minutes' };
+    var kind = planKindOf(row.category);
+    var second = chainAt(row, 1);
+
+    if (kind === 'lending') return [
+      { text: 'Read ' + n + "'s collateral list on " + chain + ": note each asset's loan-to-value, its liquidation threshold and the oracle it prices from.", cost: 'nothing but a read of the market page', time: '10 minutes' },
+      fresh,
+      { text: 'Supply $' + capital + ' of USDC to ' + n + ' on ' + chain + ' as collateral, then borrow about a third of that value in the chain\'s most liquid asset.', cost: '$' + capital + ' of capital and about $' + gas + ' of gas for the two transactions', time: '20 minutes' },
+      { text: 'Keep the health factor above 1.8, and when it drops under 2.2 repay a slice or add collateral rather than wait for the liquidation line.', cost: 'about $3 of gas per adjustment', time: '5 minutes a week' },
+      { text: 'Repay a quarter of the loan every few weeks and borrow it again, so the position stays open and active without growing.', cost: 'a few dollars of gas each round trip', time: '10 minutes twice a month' },
+      holdStep, claim
+    ];
+    if (kind === 'dex') return [
+      { text: 'Look at ' + n + "'s busiest pair on " + chain + ": its fee tier, its depth at the current price and how far the pool has already ranged this month.", cost: 'nothing to read the pool', time: '10 minutes' },
+      fresh,
+      { text: 'Provide $' + capital + ' of liquidity to that pair on ' + chain + ' in a range about 20 per cent wide around the current price, and keep the position as a receipt token.', cost: '$' + capital + ' split across both sides, plus about $' + gas + ' of gas', time: '20 minutes' },
+      { text: 'Rebalance the range when price leaves it: withdraw, re-center and re-add, and count the fees each rebalance costs you.', cost: 'about $2 of gas per rebalance', time: '15 minutes, once every two to four weeks' },
+      { text: 'Track impermanent loss against simply holding both assets: in a range position it is smaller while price stays inside the band and larger once it breaks out.', cost: 'nothing to measure', time: '10 minutes a week' },
+      { text: 'Collect the fees you have earned before you withdraw, and keep the collection in the same wallet so the activity stays one record.', cost: 'about $1 of gas per collection', time: '5 minutes a month' },
+      holdStep
+    ];
+    if (kind === 'yield') return [
+      { text: "Open " + n + "'s vault page on " + chain + ' and note the strategy it runs, the asset it takes and the fee it charges on yield.', cost: 'nothing but a read of the vault page', time: '15 minutes' },
+      { text: "Compare its stated APY against the underlying asset's own rate, such as the chain's staking yield or the base lending rate it sits on.", cost: 'nothing to compare', time: '10 minutes' },
+      fresh,
+      { text: "Deposit $" + capital + " of the vault's own asset into " + n + ' on ' + chain + ' and keep the shares or receipt token it issues you.', cost: '$' + capital + ' of capital and about $' + gas + ' of gas', time: '15 minutes' },
+      { text: 'Find the withdrawal queue before you depend on the money: how long an exit takes, whether it batches at a fixed time, and what it costs to leave early.', cost: 'nothing to read the terms', time: '10 minutes' },
+      { text: 'Re-check the APY against the underlying asset every two weeks; if the vault lags what the plain asset earns, move out rather than wait.', cost: 'about $3 of gas to move', time: '10 minutes every two weeks' },
+      holdStep
+    ];
+    if (kind === 'rwa') return [
+      { text: "Read " + n + "'s redemption terms before any deposit: who may redeem, on which " + chain + ' venue, the notice period and the fee for leaving early.', cost: 'nothing but a read of the terms', time: '20 minutes' },
+      { text: 'Note the lockup and the transfer rules: whether the asset can be sold on a secondary market or only redeemed back through the issuer.', cost: 'nothing to read', time: '10 minutes' },
+      fresh,
+      { text: "Check who holds the underlying asset and who audits the issuer, then buy $" + capital + " of " + n + "'s tokenised asset on " + chain + '.', cost: '$' + capital + ' of capital and about $' + gas + ' of gas', time: "25 minutes, including the issuer's own onboarding" },
+      { text: 'Confirm the yield actually arrives, by matching one payment against the terms you read before you put the money in.', cost: 'nothing to verify', time: '10 minutes after the first payment' },
+      holdStep,
+      { text: "When you exit, start the redemption at least one full notice period before you need the funds, and keep the issuer's confirmation in your log.", cost: 'the redemption fee the terms name', time: 'one notice period, often a week or more' }
+    ];
+    if (kind === 'perps') return [
+      { text: "Read " + n + "'s margin rules on " + chain + ': the maintenance margin, the funding interval, the liquidation fee and which oracle sets the mark price.', cost: 'nothing but a read of the docs', time: '15 minutes' },
+      fresh,
+      { text: 'Deposit $' + capital + ' of USDC as margin to ' + n + ' and open one small position worth no more than a fifth of it.', cost: '$' + capital + ' of margin and about $' + gas + ' of gas', time: '20 minutes' },
+      { text: 'Keep the margin far above maintenance, at least four times the requirement, so a normal week\'s move cannot reach the liquidation price.', cost: 'the margin stays locked in the account', time: 'checked daily, 2 minutes' },
+      { text: 'Pay attention to funding: a position held across several funding intervals costs money even when the price does not move.', cost: 'the funding rate, usually a few dollars a week on this size', time: '5 minutes a day' },
+      { text: 'Close the position a few times over the holding period and open it again, so the account carries trading volume without carrying risk overnight.', cost: 'about $2 of fees per round trip', time: '10 minutes, twice a month' },
+      holdStep
+    ];
+    if (kind === 'chain') return [
+      { text: 'Bridge $' + capital + ' of USDC onto ' + chain + ' through ' + n + ' from a chain you already use, and check the fee and the settlement wait before you send.', cost: '$' + capital + ' of capital, about $' + gas + ' of gas and the bridge fee', time: '15 minutes, plus the time the bridge itself takes' },
+      fresh,
+      { text: 'Use the bridged funds on ' + chain + ' as the chain intends: swap on one of its own venues, supply to a lender there, or hold a share of one of its pools.', cost: 'about $3 of gas for two or three transactions', time: '20 minutes' },
+      { text: 'Bridge a smaller second amount later, about a tenth of the first, so the wallet shows more than one arrival rather than a single deposit.', cost: 'about a tenth of the first bridge, plus its fee', time: '10 minutes' },
+      { text: 'Keep the position on ' + chain + ' rather than bridging straight back: an address that arrives and leaves in a day is not using the chain.', cost: 'the $' + capital + ' stays on ' + chain, time: hold + ' days' },
+      { text: 'Bridge back only through ' + n + ' again, and record both directions so the round trip is one auditable pair of transactions.', cost: 'the bridge fee on the way out', time: '15 minutes' },
+      { text: 'Check whether ' + chain + ' or ' + n + ' runs its own points or incentive programme, and if it does, register the wallet there before you bridge back.', cost: 'nothing to register, and never pay for an airdrop', time: '10 minutes' },
+      { text: "Keep a second chain the protocol lists, " + (row.chains && row.chains.indexOf(second) === 0 ? 'its second chain' : second) + ", in view, so one bridge's outage does not strand the position.", cost: 'nothing to note', time: '5 minutes' }
+    ];
     return [
-      { text: 'Use a fresh wallet that holds only the funds you plan to farm, and keep its seed phrase offline.', cost: 'under $3 of gas for the first transaction', time: '5 minutes' },
-      { text: actionFor(row, capital, chain), cost: '$' + capital + ' of capital and about $' + (capital >= 150 ? 8 : 4) + ' of gas', time: '15 minutes to set up' },
-      { text: 'Make one qualifying action each week, such as a deposit, a borrow, a swap or a vote.', cost: 'about $2 of gas a week', time: '10 minutes a week' },
-      { text: 'Hold the position for at least ' + hold + ' days so the activity is counted in more than one snapshot.', cost: 'the $' + capital + ' stays in the position', time: hold + ' days' },
-      { text: "Before you withdraw, open the protocol's own points or rewards page and claim only from the link it publishes.", cost: 'no fee to check, and never pay to claim', time: '10 minutes' },
-      { text: 'Write the wallet, the dates and every transaction in a farm log so you can repeat the position or unwind it.', cost: 'nothing but the log', time: '5 minutes' }
+      fresh,
+      { text: actionFor(row, capital, chain), cost: '$' + capital + ' of capital and about $' + gas + ' of gas', time: '15 minutes to set up' },
+      weekly, holdStep, claim, log
     ];
   }
 
@@ -162,12 +251,12 @@
 
   $('#formula').innerHTML =
     'implied value  =  <b>TVL</b>  ×  <b>category multiple</b>  ×  <b>growth</b>  ×  <b>maturity</b>' +
-    '<br>category multiple = median( market cap ÷ TVL ) over the protocols in the same category that already trade' +
+    '<br>category multiple = median( market cap ÷ TVL ) over the protocols in the same category family that already trade' +
     (market ? '  ·  market-wide median ' + fmtMult(market.multiple) + ' over ' + market.sample_size + ' live protocols' : '');
 
   $('#note').textContent =
     'Every number comes from the snapshot alone: a protocol\u2019s TVL, its seven-day change and how long it has run without a token. ' +
-    'The multiple is read off that category\u2019s live-token protocols rather than fixed by hand, so a sector the market already pays up for is valued higher. ' +
+    'The multiple is read off the live-token protocols of that category\u2019s family (Lending with CDP, Dexs with DEX, Liquid Staking with Liquid Restaking), so a sector the market already pays up for is valued higher. ' +
     'Protocols whose token already trades are never mixed into this board; they are on the second tab at the market\u2019s own values.';
 
   /* ---------- filters ---------- */
@@ -330,10 +419,10 @@
 
     var multSource = '';
     (R.multiples || []).forEach(function (m) {
-      if (r.category && m.category === r.category) {
-        multSource = m.source === 'category-median'
-          ? 'median of ' + m.sample_size + ' live ' + r.category + ' protocols'
-          : 'market median (only ' + m.sample_size + ' live in this category)';
+      if (r.category_family && m.category === r.category_family) {
+        multSource = m.source === 'family-median'
+          ? 'median of ' + m.sample_size + ' live ' + r.category_family + ' protocols'
+          : 'market median (only ' + m.sample_size + ' live in ' + r.category_family + ')';
       }
     });
 
