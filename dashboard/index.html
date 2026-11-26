@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Token Radar: pre-token protocols ranked by implied value</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<a class="skip" href="#board">Skip to the board</a>
+
+<header class="top">
+  <div class="brand">
+    <span class="mark" aria-hidden="true"></span>
+    <span class="name">Token Radar</span>
+    <span class="ver" id="ver">radar-2</span>
+  </div>
+  <div class="meta" id="meta"></div>
+</header>
+
+<section class="explain">
+  <h1>What a protocol's token would be worth if its record stayed as it is</h1>
+  <p class="formula" id="formula"></p>
+  <p class="note" id="note"></p>
+</section>
+
+<nav class="tabs" id="tabs">
+  <button type="button" class="tab is-on" data-tab="pre-token">Pre-token board <span class="count" id="countBoard">0</span></button>
+  <button type="button" class="tab" data-tab="live">Already trading <span class="count" id="countLive">0</span></button>
+</nav>
+
+<div class="toolbar" id="toolbar">
+  <label class="field grow">
+    <span>Search</span>
+    <input id="q" type="search" placeholder="protocol, category or chain" autocomplete="off">
+  </label>
+  <label class="field">
+    <span>Category</span>
+    <select id="category"><option value="all">All categories</option></select>
+  </label>
+  <label class="field">
+    <span>Chain</span>
+    <select id="chain"><option value="all">All chains</option></select>
+  </label>
+  <label class="toggle">
+    <input id="early" type="checkbox">
+    <span>Early finds only</span>
+  </label>
+  <button type="button" class="reset" id="reset">Reset</button>
+</div>
+
+<p class="status" id="status" role="status"></p>
+
+<main id="board" tabindex="-1"></main>
+
+<aside class="drawer" id="drawer" hidden aria-live="polite"></aside>
+
+<footer class="foot">
+  <span id="foot"></span>
+</footer>
+
+<script src="../data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
